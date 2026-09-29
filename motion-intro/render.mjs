@@ -1,5 +1,6 @@
 // Render motion design ke MP4 frame-demi-frame (deterministik).
 // Pemakaian: node render.mjs [output.mp4] [fps]
+//   START=0 END=20 node render.mjs seg1.mp4   -> render sebagian (detik), untuk render paralel
 //   PREVIEW="1,5.5,12" node render.mjs   -> simpan still PNG di frame waktu tertentu
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
@@ -31,16 +32,17 @@ if (process.env.PREVIEW) {
   process.exit(0);
 }
 
-const total = Math.round(dur * fps);
+const first = Math.round((+(process.env.START || 0)) * fps);
+const last = Math.min(Math.round(dur * fps), Math.round((+(process.env.END || dur)) * fps));
 const ff = spawn(ffmpeg, ['-y', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'mjpeg', '-i', '-',
   '-c:v', 'libx264', '-preset', 'slow', '-crf', '20', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', out],
   { stdio: ['pipe', 'inherit', 'inherit'] });
 const t0 = Date.now();
-for (let i = 0; i < total; i++) {
+for (let i = first; i < last; i++) {
   await page.evaluate(t => window.__seek(t), i / fps);
   const buf = await page.screenshot({ type: 'jpeg', quality: 94 });
   if (!ff.stdin.write(buf)) await new Promise(r => ff.stdin.once('drain', r));
-  if (i % 150 === 0) console.log(`frame ${i}/${total}  ${((Date.now() - t0) / 1000).toFixed(0)}s`);
+  if (i % 150 === 0) console.log(`frame ${i}/${last}  ${((Date.now() - t0) / 1000).toFixed(0)}s`);
 }
 ff.stdin.end();
 await new Promise(r => ff.on('close', r));
